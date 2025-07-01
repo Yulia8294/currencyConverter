@@ -31,7 +31,7 @@ extension AppDelegate: UIApplicationDelegate {
 }
 
 @main
-struct HashtagsApp: SwiftUI.App {
+struct App: SwiftUI.App {
   @UIApplicationDelegateAdaptor(AppDelegate.self)
   private var appDelegate
 
