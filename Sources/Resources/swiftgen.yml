@@ -1,0 +1,24 @@
+input_dir: ./Resources
+output_dir: ./
+
+strings:
+  inputs: 
+    - en.lproj/Localizable.strings
+  outputs:
+    templateName: structured-swift4
+    output: Localizable.generated.swift
+    params:
+      bundle: Bundle.module
+      publicAccess: true
+
+xcassets:
+  inputs:
+    - ColorCatalog.xcassets
+    - MediaCatalog.xcassets
+  outputs:
+    templateName: swift5
+    output: XCAsset.generated.swift
+    params:
+      bundle: Bundle.module
+      enumName: XCAsset
+      publicAccess: true

@@ -1,0 +1,124 @@
+default_platform(:ios)
+
+app_name="filters"
+build_directory="./build"
+project_path= "./App/App.xcodeproj"
+
+ENV["FL_BUILD_NUMBER_PROJECT"] = project_path
+ENV["FL_VERSION_NUMBER_PROJECT"] = project_path
+ENV["FL_VERSION_NUMBER_TARGET"] = "Chat"
+ENV["GYM_SCHEME"] = "Chat"
+ENV["GYM_WORKSPACE"] = "Chat.xcworkspace"
+ENV["SCAN_SCHEME"] = "Chat"
+ENV["GOOGLE_SERVICES_INFO_PLIST_PATH"] = "./App/iOS/GoogleService-Info.plist"
+
+def change_log_since_last_tag
+  # http://git-scm.com/docs/pretty-formats
+  # <short hash> <commit title>
+  return changelog_from_git_commits(
+    pretty: '- %s',
+    merge_commit_filtering: 'exclude_merges'
+  )
+end
+
+desc "Get the git tag of your project"
+private_lane :get_git_tag do
+
+  version = get_version_number()
+  build = get_build_number()
+
+  "#{app_name}-#{version}-#{build}"
+end
+
+desc "Get the version of your project"
+private_lane :get_version do
+  version = get_version_number()
+  build = get_build_number()
+
+  "#{version}-#{build}"
+end
+
+platform :ios do
+
+  lane :update_version do
+    increment_build_number()
+  end
+
+  lane :commit_version do
+    commit_version_bump()
+  end
+
+  lane :add_current_version_git_tag do
+    tag = get_git_tag()
+
+    if git_tag_exists(tag: tag)
+      UI.user_error!("Tag #{tag} already exists")
+    end
+
+    add_git_tag(tag: tag)
+  end
+
+  lane :deploy do
+    update_version()
+
+    tag = get_git_tag()
+
+    if git_tag_exists(tag: tag)
+      UI.user_error!("Tag #{tag} already exists")
+    end
+
+    changelog = change_log_since_last_tag()
+
+    build_ios_app(
+      clean: true,
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: build_directory
+    )
+
+    upload_to_testflight(
+      expire_previous_builds: true,
+      skip_submission: true,
+      skip_waiting_for_build_processing: true
+    )
+
+    commit_version()
+    add_git_tag(
+      tag: tag
+    )
+    push_to_git_remote()
+
+    post_notifications(
+      environment: "Release",
+      destination: "TestFlight",
+      changelog: changelog
+    )
+  end
+
+  lane :swiftgen do
+    sh "cd ../Sources/Resources ; swiftgen config run --config swiftgen.yml"
+  end
+
+  error do |lane, exception|
+    notification(message: "'#{lane}' lane failed")
+  end
+
+  private_lane :post_notifications do |options|
+    version = get_version()
+
+    environment = options[:environment]
+    destination = options[:destination]
+    changelog = options[:changelog]
+
+    message = "Submitted new #{app_name} build *#{environment} #{version}* to *#{destination}* 🚀"
+    if changelog
+      message = "#{message}\n\n*Release notes*\n#{changelog}\n"
+    end
+
+    notification(
+      message: "Submitted new #{app_name} #{environment} #{version} to #{destination}"
+    )
+
+  end
+
+end

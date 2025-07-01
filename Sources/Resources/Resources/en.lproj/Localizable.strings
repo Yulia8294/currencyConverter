@@ -1,0 +1,22 @@
+"Button.cancel" = "Cancel";
+"Button.copy" = "Copy";
+"Button.copyAll" = "Copy All";
+"Button.delete" = "Delete";
+"Button.done" = "Done";
+"Button.ok" = "OK";
+"Button.openSettings" = "Go to Settings";
+"Shared.clear" = "Clear";
+
+"tabBar.convert.title" = "Convert";
+"tabBar.history.title" = "History";
+
+"conversionHistory.navBar.title" = "Conversion History";
+"conversionHistory.searchPlaceholder" = "Search by currency";
+"conversionHistory.emptyHistory" = "No history yet";
+"conversionHistory.noSearchResults" = "No results for '%@'";
+"conversionHistory.rateLabel" = "Rate: %@";
+
+"conversion.fromPicker.title" = "From";
+"conversion.toPicker.title" = "To";
+"conversion.sourceAmount.title" = "Amount";
+
