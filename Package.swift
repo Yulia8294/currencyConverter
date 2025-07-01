@@ -25,7 +25,6 @@ let package = Package(
   targets: [
     .model,
     .resources,
-    .sharedUI,
     .Client.persistence,
     .Client.exchange,
     .Feature.currencyConversion,
@@ -35,13 +34,6 @@ let package = Package(
 )
 
 extension Target {
-  static let sharedUI = target(
-    name: .sharedUI,
-    dependencies: [
-      .resources,
-    ]
-  )
-
   static let model = target(
     name: .model,
     dependencies: [
@@ -94,7 +86,6 @@ extension Target {
       dependencies: [
         .Client.persistence,
         .Client.exchange,
-        .sharedUI,
         .resources,
         .External.composableArchitecture
       ]
@@ -104,7 +95,6 @@ extension Target {
       name: .Feature.conversionHistory,
       dependencies: [
         .Client.persistence,
-        .sharedUI,
         .resources,
         .External.composableArchitecture
       ]
@@ -115,7 +105,6 @@ extension Target {
 extension Target.Dependency {
   static let model = byName(name: .model)
   static let resources = byName(name: .resources)
-  static let sharedUI = byName(name: .sharedUI)
 
   enum Client {
     static let persistence = byName(name: .Client.persistence)
@@ -139,7 +128,6 @@ extension Target.Dependency {
 extension String {
   static let model = "Model"
   static let resources = "Resources"
-  static let sharedUI = "SharedUI"
 
   enum Client {
     static let persistence = "PersistenceClient"
