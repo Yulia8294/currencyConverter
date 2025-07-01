@@ -14,25 +14,13 @@ let package = Package(
   ],
   dependencies: [
     .package(
-      url: "https://github.com/apple/swift-algorithms",
-      from: "1.2.1"
-    ),
-    .package(
-      url: "https://github.com/apple/swift-collections",
-      from: "1.1.4"
-    ),
-    .package(
       url: "https://github.com/pointfreeco/swift-composable-architecture",
       from: "1.18.0"
     ),
     .package(
       url: "https://github.com/pointfreeco/swift-dependencies",
       from: "1.8.1"
-    ),
-    .package(
-      url: "https://github.com/pointfreeco/swift-tagged",
-      from: "0.10.0"
-    ),
+    )
   ],
   targets: [
     .model,
@@ -57,7 +45,6 @@ extension Target {
   static let model = target(
     name: .model,
     dependencies: [
-      .External.tagged,
       .resources
     ]
   )
@@ -75,7 +62,6 @@ extension Target {
       name: .Client.persistence,
       dependencies: [
         .model,
-        .External.tagged,
         .External.composableArchitecture,
       ]
     )
@@ -85,7 +71,6 @@ extension Target {
       dependencies: [
         .model,
         .Client.persistence,
-        .External.tagged,
         .External.composableArchitecture,
       ]
     )
@@ -147,18 +132,6 @@ extension Target.Dependency {
     static let composableArchitecture = product(
       name: "ComposableArchitecture",
       package: "swift-composable-architecture"
-    )
-
-    enum Collections {
-      static let orderedCollections = product(
-        name: "OrderedCollections",
-        package: "swift-collections"
-      )
-    }
-
-    static let tagged = product(
-      name: "Tagged",
-      package: "swift-tagged"
     )
   }
 }

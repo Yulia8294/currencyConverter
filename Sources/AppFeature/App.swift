@@ -59,7 +59,11 @@ public struct AppReducer {
     Reduce { state, action in
       switch action {
       case .appDelegate(.didFinishLaunching):
-        exchangeClient.initialize()
+        do {
+          try exchangeClient.initialize()
+        } catch {
+          print(error.localizedDescription)
+        }
         return .none
       case .appDelegate:
         return .none

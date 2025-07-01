@@ -13,25 +13,28 @@ extension DependencyValues {
 @DependencyClient
 public struct ExchangeClient: Sendable {
 
-  public var initialize: @Sendable () -> Void
+  public var initialize: @Sendable () throws -> Void
   public var convert: @Sendable (ConvertRequest) async throws -> Conversion
 
   public enum ExchangeError: Error, Equatable, LocalizedError {
     case exchangeRateNotFound
-    case decodingError
+    case apiKeyMissing
+    case invalidRequest(reason: String)
+    case decodingError(underlying: String)
     case networkError(description: String)
-    case invalidRequest
 
     public var errorDescription: String? {
       switch self {
       case .exchangeRateNotFound:
         return "The requested exchange rate could not be found."
-      case .decodingError:
-        return "Failed to decode the response."
+      case .decodingError(let description):
+        return "Failed to decode the response: \(description)"
       case .networkError(let description):
         return "Network error: \(description)"
-      case .invalidRequest:
-        return "Invalid conversion request."
+      case .invalidRequest(let reason):
+        return "Invalid conversion request: \(reason)"
+      case .apiKeyMissing:
+        return "Api key is missing or invalid"
       }
     }
   }

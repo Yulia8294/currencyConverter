@@ -12,6 +12,7 @@ public struct CurrencyConversion {
     case binding(BindingAction<State>)
 
     case conversionResponse(Result<Conversion, Error>)
+    case lastPairResponse((Currency, Currency)?)
   }
 
   @ObservableState
@@ -49,9 +50,11 @@ public struct CurrencyConversion {
     Reduce { state, action in
       switch action {
       case .onAppear:
-        if let lastPair = persistenceClient.fetchLastConversionPair() {
-          state.sourceCurrency = lastPair.0
-          state.targetCurrency = lastPair.1
+        return fetchLastPair(state: &state)
+      case .lastPairResponse(let pair):
+        if let pair {
+          state.sourceCurrency = pair.0
+          state.targetCurrency = pair.1
         }
 
         return .none
@@ -113,6 +116,15 @@ public struct CurrencyConversion {
       for: 0.2,
       scheduler: mainQueue
     )
+  }
+
+  private func fetchLastPair(
+    state: inout State
+  ) -> Effect<Action> {
+    return .run { send in
+      let result = await persistenceClient.fetchLastConversionPair()
+      await send(.lastPairResponse(result))
+    }
   }
 }
 // swiftlint:enable closure_parameter_position

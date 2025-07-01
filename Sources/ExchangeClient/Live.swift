@@ -4,15 +4,19 @@ import PersistenceClient
 
 public extension ExchangeClient {
   static func live(
-    persistenceClient: PersistenceClient
+    persistenceClient: PersistenceClient,
+    session: URLSession = .shared,
+    cacheMaxAge: TimeInterval = 7200
   ) -> ExchangeClient {
     let impl = ExchangeClientImpl(
-      persistenceClient: persistenceClient
+      persistenceClient: persistenceClient,
+      session: session,
+      cacheMaxAge: cacheMaxAge
     )
 
     return Self(
       initialize: {
-        impl.initialize()
+        try impl.initialize()
       },
       convert: {
         try await impl.convert($0)
@@ -23,27 +27,27 @@ public extension ExchangeClient {
 
 private final class ExchangeClientImpl {
   let persistenceClient: PersistenceClient
+  let session: URLSession
+  let cacheMaxAge: TimeInterval
 
   let decoder = JSONDecoder()
-  let session = URLSession.shared
-  let cacheMaxAge: TimeInterval = 7200
   var apiKey: String = ""
 
-  init(persistenceClient: PersistenceClient) {
+  init(persistenceClient: PersistenceClient, session: URLSession, cacheMaxAge: TimeInterval) {
     self.persistenceClient = persistenceClient
+    self.session = session
+    self.cacheMaxAge = cacheMaxAge
   }
 
-  func initialize() {
+  func initialize() throws {
     let bundle = Bundle.main
     guard let apiKey = bundle.exchangeApiKey else {
-      assertionFailure("Cannot find valid Exchange settings")
-      self.apiKey = ""
-      return
+      throw ExchangeClient.ExchangeError.apiKeyMissing
     }
     self.apiKey = apiKey
   }
 
-  private struct Response: Decodable {
+  private struct APIResponse: Decodable {
     let data: [String: Double]
   }
 
@@ -82,34 +86,56 @@ private final class ExchangeClientImpl {
     source: Currency,
     target: Currency
   ) async throws -> ExchangeRate {
-    let url = URL(string: .apiRoot)!
-      .appending(
-        queryItems: [
-          .init(name: .apiKeyKey, value: apiKey),
-          .init(name: .baseCurrencyKey, value: source.key)
-        ]
+    guard !apiKey.isEmpty else {
+      throw ExchangeClient.ExchangeError.apiKeyMissing
+    }
+
+    let url = try buildURL(for: source)
+    let request = buildRequest(for: url)
+
+    do {
+      let (data, _) = try await session.data(from: url)
+      let result = try decoder.decode(APIResponse.self, from: data)
+
+      return ExchangeRate(
+        source: source,
+        rates: result.data,
+        timestamp: Date()
       )
+    } catch let error as DecodingError {
+      throw ExchangeClient.ExchangeError.decodingError(underlying: error.localizedDescription)
+    } catch let error as ExchangeClient.ExchangeError {
+      throw error
+    } catch {
+      throw ExchangeClient.ExchangeError.networkError(description: error.localizedDescription)
+    }
+  }
 
-    var request = URLRequest(url: url)
-    request.allHTTPHeaderFields = [
-      "cache-control": "public, max-age:\(cacheMaxAge)"
-    ]
+  private func buildURL(for source: Currency) throws -> URL {
+    guard let url = URL(string: .apiRoot) else {
+      throw ExchangeClient.ExchangeError.invalidRequest(reason: "Invalid API URL")
+    }
 
-    let (data, res) = try await session.data(from: url)
-    print(res)
-    let result = try decoder.decode(Response.self, from: data)
-
-    return ExchangeRate(
-      source: source,
-      rates: result.data,
-      timestamp: Date()
+    return url.appending(
+      queryItems: [
+        URLQueryItem(name: .apiKeyParam, value: apiKey),
+        URLQueryItem(name: .baseCurrencyParam, value: source.key)
+      ]
     )
+  }
+
+  private func buildRequest(for url: URL) -> URLRequest {
+    var request = URLRequest(url: url)
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+    request.setValue("public, max-age=\(Int(cacheMaxAge))", forHTTPHeaderField: "Cache-Control")
+    request.timeoutInterval = 30
+    return request
   }
 }
 
 private extension String {
-  static let baseCurrencyKey = "base_currency"
-  static let apiKeyKey = "apikey"
+  static let baseCurrencyParam = "base_currency"
+  static let apiKeyParam = "apikey"
   static let apiRoot = "https://api.freecurrencyapi.com/v1/latest"
 }
 

@@ -22,7 +22,7 @@ extension PersistenceClient {
         try await impl.saveConversion($0)
       },
       fetchLastConversionPair: {
-        impl.fetchLastConversionPair()
+        await impl.fetchLastConversionPair()
       },
       saveConversionPair: {
         try await impl.saveConversionPair(source: $0, target: $1)
@@ -31,54 +31,52 @@ extension PersistenceClient {
   }()
 }
 
-private final class PersistenceClientImpl {
+private final actor PersistenceClientImpl {
+  private let encoder: JSONEncoder
+  private let decoder: JSONDecoder
+  private let storage: UserDefaults
+  private let cacheMaxAge: TimeInterval
 
-  private let encoder = JSONEncoder()
-  private let decoder = JSONDecoder()
-  private let storage = UserDefaults.standard
-  private let cacheMaxAge: TimeInterval = 7200
+  init(
+    encoder: JSONEncoder = JSONEncoder(),
+    decoder: JSONDecoder = JSONDecoder(),
+    cacheMaxAge: TimeInterval = 7200
+  ) {
+    self.encoder = encoder
+    self.decoder = decoder
+    self.cacheMaxAge = cacheMaxAge
+    self.storage = UserDefaults.standard
+  }
 
   func fetchCachedRates() async throws -> [String: ExchangeRate] {
     guard let data = storage.data(forKey: .cachedRates) else {
       return [:]
     }
-    print("fetchCachedRates(), \(data)")
-    return try decoder.decode([String: ExchangeRate].self, from: data)
+
+    do {
+      return try decoder.decode([String: ExchangeRate].self, from: data)
+    } catch {
+      storage.removeObject(forKey: .cachedRates)
+      throw PersistenceClient.PersistenceError.dataCorrupted
+    }
   }
 
   func cacheRates(_ rate: ExchangeRate) async throws {
     var allRates = try await fetchCachedRates()
-    let sourceKey = rate.source.key
-    if let existing = allRates[sourceKey], isCachedRateValid(existing) {
-      allRates[sourceKey] = rate
-    } else {
-      allRates[sourceKey] = rate
-    }
-    print("cacheRates(), \(allRates)")
+    let currentRate = allRates[rate.source.key]
 
-    let data = try encoder.encode(allRates)
-    storage.set(data, forKey: .cachedRates)
+    if currentRate == nil || !isRateValid(currentRate!) {
+      allRates[rate.source.key] = rate
+      try save(data: allRates, forKey: .cachedRates)
+    }
   }
 
   func fetchCachedRate(for source: Currency) async throws -> ExchangeRate? {
-    let allRates = try await fetchCachedRates()
-    let rate = allRates[source.key]
-    if let rate, isCachedRateValid(rate) {
-      print("fetchCachedRate(), cache rate fetched")
-      return rate
-    }
-    print("fetchCachedRate(), cache rate expired")
-    return nil
-  }
-
-  func fetchLastConversionPair() -> (Currency, Currency)? {
-    guard let data = storage.data(forKey: .lastConversionPair),
-          let pair = try? decoder.decode([Currency].self, from: data),
-          pair.count == 2 else {
+    guard let rate = try await fetchCachedRates()[source.key],
+          isRateValid(rate) else {
       return nil
     }
-
-    return (pair[0], pair[1])
+    return rate
   }
 
   func fetchConversionsHistory() async throws -> [Conversion] {
@@ -91,17 +89,34 @@ private final class PersistenceClientImpl {
   func saveConversion(_ conversion: Conversion) async throws {
     var conversions = try await fetchConversionsHistory()
     conversions.insert(conversion, at: 0)
-    let data = try encoder.encode(conversions)
-    storage.set(data, forKey: .conversionsHistory)
+    try save(data: Array(conversions.prefix(100)), forKey: .conversionsHistory)
+  }
+
+  func fetchLastConversionPair() async -> (Currency, Currency)? {
+    guard let data = storage.data(forKey: .lastConversionPair),
+          let pair = try? decoder.decode([Currency].self, from: data),
+          pair.count == 2 else {
+      return nil
+    }
+
+    return (pair[0], pair[1])
   }
 
   func saveConversionPair(source: Currency, target: Currency) async throws {
-    let data = try encoder.encode([source, target])
-    storage.set(data, forKey: .lastConversionPair)
+    try save(data: [source, target], forKey: .lastConversionPair)
   }
 
-  private func isCachedRateValid(_ rate: ExchangeRate) -> Bool {
+  private func isRateValid(_ rate: ExchangeRate) -> Bool {
     Date().timeIntervalSince(rate.timestamp) < cacheMaxAge
+  }
+
+  private func save<T: Encodable>(data: T, forKey key: String) throws {
+    do {
+      let encoded = try encoder.encode(data)
+      storage.set(encoded, forKey: key)
+    } catch {
+      throw PersistenceClient.PersistenceError.storageFailure
+    }
   }
 }
 
